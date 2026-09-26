@@ -1,0 +1,18 @@
+{
+  "name": "viralense",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start":   "node server.mjs",
+    "db:init": "node db/init.js",
+    "test":    "node --test src/score.test.js"
+  },
+  "dependencies": {
+    "@smartspectra/node-sdk": "latest",
+    "dotenv":  "^16.4.5",
+    "express": "^4.21.0",
+    "pg":      "^8.13.0",
+    "sharp":   "^0.33.0",
+    "ws":      "^8.18.0"
+  }
+}

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Viralense</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #0f1117; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; }
+
+    header { padding: 0.85rem 1.25rem; background: #1a1d2e; border-bottom: 1px solid #2d3148; display: flex; align-items: center; gap: 1rem; }
+    header h1 { font-size: 1.3rem; font-weight: 700; color: #7c8aff; letter-spacing: -0.01em; }
+    #status-bar { font-size: 0.8rem; color: #888; }
+    #validation-hint { font-size: 0.8rem; color: #ffd700; margin-left: auto; }
+
+    main { flex: 1; display: flex; gap: 1rem; padding: 1rem; overflow: hidden; }
+
+    #left { width: 370px; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.75rem; overflow-y: auto; }
+    #right { flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+
+    .card { background: #1a1d2e; border: 1px solid #2d3148; border-radius: 8px; padding: 0.9rem; }
+    .section-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.07em; color: #555; margin-bottom: 0.6rem; }
+
+    #feed-img { width: 100%; border-radius: 5px; background: #0a0b12; display: block; min-height: 180px; object-fit: cover; }
+    #cam-hint { font-size: 0.75rem; color: #ffd700; margin-top: 0.35rem; min-height: 1.1em; }
+
+    .metric-row { display: flex; justify-content: space-between; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid #23263b; font-size: 0.88rem; }
+    .metric-row:last-child { border-bottom: none; }
+    .metric-val { font-weight: 600; font-variant-numeric: tabular-nums; color: #a0d4ff; }
+
+    #progress-label { font-size: 0.78rem; color: #888; margin-bottom: 0.4rem; }
+    #progress-bar { width: 100%; height: 5px; appearance: none; border-radius: 3px; }
+    #progress-bar::-webkit-progress-bar   { background: #2d3148; border-radius: 3px; }
+    #progress-bar::-webkit-progress-value { background: #7c8aff; border-radius: 3px; }
+    #progress-bar::-moz-progress-bar      { background: #7c8aff; border-radius: 3px; }
+
+    #form-card { display: none; }
+    #form-section { display: flex; flex-direction: column; gap: 0.55rem; }
+    #form-section label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; cursor: pointer; user-select: none; }
+    #form-section input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: #7c8aff; flex-shrink: 0; }
+    #submit-btn { margin-top: 0.4rem; padding: 0.55rem 1rem; background: #7c8aff; color: #fff; border: none; border-radius: 6px; font-size: 0.88rem; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+    #submit-btn:hover:not(:disabled) { background: #6470e8; }
+    #submit-btn:disabled { background: #2d3148; color: #555; cursor: not-allowed; }
+    #fake-sick-btn { margin-top: 0.25rem; padding: 0.5rem 1rem; background: #7a3a00; color: #ffb347; border: 1px dashed #ff8c00; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: background 0.15s; width: 100%; }
+    #fake-sick-btn:hover { background: #9a4a00; }
+
+    #result-section { display: none; margin-top: 0.6rem; padding: 0.7rem 0.85rem; border-radius: 6px; font-size: 0.85rem; line-height: 1.5; }
+    .result-high { background: #2b0d16; border: 1px solid #7f1d30; color: #f87171; }
+    .result-low  { background: #0c2216; border: 1px solid #166534; color: #6ee7a0; }
+
+    #map { flex: 1; border-radius: 6px; min-height: 400px; }
+    .map-legend { display: flex; gap: 1rem; font-size: 0.75rem; color: #888; flex-wrap: wrap; }
+    .ldot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Viralense</h1>
+  <span id="status-bar">Connecting…</span>
+  <span id="validation-hint"></span>
+</header>
+
+<main>
+  <!-- Left panel: camera + metrics + form -->
+  <div id="left">
+
+    <div class="card" style="padding:0.5rem">
+      <img id="feed-img" alt="Camera feed"
+           src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"/>
+      <div id="cam-hint"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-title">Live Vitals</div>
+      <div class="metric-row"><span>Pulse</span>       <span class="metric-val"><span id="m-pulse">--</span> bpm</span></div>
+      <div class="metric-row"><span>Breathing</span>   <span class="metric-val"><span id="m-breath">--</span> rpm</span></div>
+      <div class="metric-row"><span>HRV (RMSSD)</span> <span class="metric-val"><span id="m-hrv">--</span> ms</span></div>
+      <div class="metric-row"><span>Confidence</span>  <span class="metric-val"><span id="m-conf">--</span></span></div>
+    </div>
+
+    <div class="card">
+      <div id="progress-label">Measuring… 0 / 30 s</div>
+      <progress id="progress-bar" max="30" value="0"></progress>
+    </div>
+
+    <div id="form-card" class="card">
+      <div class="section-title">Before you submit</div>
+      <div id="form-section">
+        <label><input type="checkbox" id="exercised"> Exercised in the last 30 minutes?</label>
+        <label><input type="checkbox" id="symptoms"> Cough, fever or sore throat?</label>
+        <button id="submit-btn">Submit Reading</button>
+        <button id="fake-sick-btn">🧪 Fake Sick (test)</button>
+      </div>
+      <div id="result-section"></div>
+    </div>
+
+  </div>
+
+  <!-- Right panel: map -->
+  <div id="right">
+    <div class="card" style="flex:1;display:flex;flex-direction:column;gap:0.5rem;">
+      <div class="section-title">Contamination Risk Areas — last 7 days, min. 3 people per cell</div>
+      <div id="map"></div>
+      <div class="map-legend">
+        <span><span class="ldot" style="background:#ffd700"></span>Moderate (avg score &lt; 3)</span>
+        <span><span class="ldot" style="background:#ff8c00"></span>Elevated (avg score 3–4)</span>
+        <span><span class="ldot" style="background:#dc143c"></span>High Risk (avg score ≥ 4)</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  // ── User identity (persisted in localStorage) ─────────────────────────────
+  let userId = localStorage.getItem('viralense_uid');
+  if (!userId) {
+    userId = crypto.randomUUID();
+    localStorage.setItem('viralense_uid', userId);
+  }
+
+  // ── State ─────────────────────────────────────────────────────────────────
+  let measureStart  = null;
+  let elapsedSec    = 0;
+  let userLocation  = null;
+  const lm = { pulseRate: null, breathingRate: null, hrvMs: null,
+                pulseConf: null, breathConf: null, confidence: null };
+
+  // ── Leaflet map ───────────────────────────────────────────────────────────
+  const map = L.map('map').setView([20, 0], 2);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  }).addTo(map);
+  const riskLayer = L.layerGroup().addTo(map);
+
+  async function loadRiskAreas() {
+    try {
+      const res   = await fetch('/risk-areas');
+      const areas = await res.json();
+      riskLayer.clearLayers();
+      areas.forEach(area => {
+        const s     = area.avgScore;
+        const color = s >= 4 ? '#dc143c' : s >= 3 ? '#ff8c00' : '#ffd700';
+        L.circle([area.lat, area.lng], {
+          radius:      300 + area.people * 100,
+          color,
+          fillColor:   color,
+          fillOpacity: 0.4,
+          weight:      1.5,
+        }).bindPopup(
+          `<b>${area.people} ${area.people === 1 ? 'person' : 'people'}</b><br>` +
+          `Avg risk score: ${area.avgScore.toFixed(1)}<br>` +
+          `Last seen: ${new Date(area.lastSeen).toLocaleString()}`
+        ).addTo(riskLayer);
+      });
+    } catch { /* silently ignore on network error */ }
+  }
+
+  loadRiskAreas();
+  setInterval(loadRiskAreas, 60_000);
+
+  // ── Geolocation ───────────────────────────────────────────────────────────
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        map.setView([userLocation.lat, userLocation.lng], 13);
+      },
+      () => {
+        document.getElementById('cam-hint').textContent =
+          'Location permission denied — readings cannot be stored.';
+      }
+    );
+  }
+
+  // ── WebSocket ─────────────────────────────────────────────────────────────
+  const ws = new WebSocket(`ws://${location.host}`);
+
+  ws.onmessage = ({ data }) => {
+    let msg;
+    try { msg = JSON.parse(data); } catch { return; }
+
+    if (msg.type === 'frame') {
+      document.getElementById('feed-img').src = 'data:image/jpeg;base64,' + msg.data;
+      return;
+    }
+    if (msg.type === 'status') {
+      document.getElementById('status-bar').textContent = 'SDK: ' + msg.status;
+      return;
+    }
+    if (msg.type === 'validation') {
+      document.getElementById('validation-hint').textContent = msg.hint || '';
+      return;
+    }
+    if (msg.type === 'metrics') {
+      onMetrics(msg);
+    }
+  };
+
+  ws.onerror = () => {
+    document.getElementById('status-bar').textContent = 'WebSocket connection failed';
+  };
+
+  // ── Metrics update ────────────────────────────────────────────────────────
+  function onMetrics(msg) {
+    if (!measureStart) measureStart = Date.now();
+
+    const pr = msg.cardio?.pulseRate;
+    const br = msg.breathing?.rate;
+    const hv = msg.cardio?.hrv;
+
+    if (pr) { lm.pulseRate    = pr.value;    lm.pulseConf  = pr.confidence; }
+    if (br) { lm.breathingRate = br.value;   lm.breathConf = br.confidence; }
+    if (hv?.rmssd != null) lm.hrvMs = hv.rmssd;
+
+    // SDK confidence is 0-100; normalize to 0-1 for the scoring function
+    const confs = [lm.pulseConf, lm.breathConf].filter(v => v != null);
+    lm.confidence = confs.length ? Math.min(...confs) / 100 : null;
+
+    const fmt = (id, val, digits = 1) =>
+      (document.getElementById(id).textContent = val != null ? val.toFixed(digits) : '--');
+    fmt('m-pulse',  lm.pulseRate);
+    fmt('m-breath', lm.breathingRate);
+    fmt('m-hrv',    lm.hrvMs);
+    document.getElementById('m-conf').textContent =
+      lm.confidence != null ? (lm.confidence * 100).toFixed(0) + '%' : '--';
+  }
+
+  // ── Progress ticker ───────────────────────────────────────────────────────
+  setInterval(() => {
+    if (!measureStart) return;
+    elapsedSec    = Math.floor((Date.now() - measureStart) / 1000);
+    const capped  = Math.min(elapsedSec, 30);
+    document.getElementById('progress-bar').value = capped;
+    document.getElementById('progress-label').textContent =
+      elapsedSec >= 30
+        ? 'Measurement complete (30+ s) — ready to submit'
+        : `Measuring… ${elapsedSec} / 30 s`;
+    if (elapsedSec >= 30) {
+      document.getElementById('form-card').style.display = 'block';
+    }
+  }, 500);
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  document.getElementById('submit-btn').addEventListener('click', async () => {
+    if (!userLocation) {
+      return alert('Location permission is required to submit a reading.\nPlease allow location access and refresh the page.');
+    }
+    if (!lm.pulseRate || !lm.breathingRate) {
+      return alert('Waiting for valid metrics from the SDK. Please try again in a moment.');
+    }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled    = true;
+    btn.textContent = 'Submitting…';
+
+    const resultEl = document.getElementById('result-section');
+    resultEl.style.display = 'none';
+
+    try {
+      const body = {
+        userId,
+        lat:               userLocation.lat,
+        lng:               userLocation.lng,
+        pulseRate:         lm.pulseRate,
+        breathingRate:     lm.breathingRate,
+        hrvMs:             lm.hrvMs ?? undefined,
+        confidence:        lm.confidence ?? 0,
+        durationSec:       elapsedSec,
+        exercisedRecently: document.getElementById('exercised').checked,
+        symptoms:          document.getElementById('symptoms').checked,
+      };
+
+      const res    = await fetch('/readings', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      const result = await res.json();
+
+      resultEl.style.display = 'block';
+      if (result.error) {
+        resultEl.className   = 'result-high';
+        resultEl.textContent = 'Error: ' + result.error;
+      } else if (result.highRisk) {
+        resultEl.className   = 'result-high';
+        resultEl.innerHTML   =
+          `<strong>High risk flagged (score ${result.score})</strong>` +
+          (result.reasons.length ? '<br>' + result.reasons.join(' · ') : '');
+        loadRiskAreas();
+      } else {
+        resultEl.className   = 'result-low';
+        resultEl.innerHTML   =
+          `<strong>Normal reading (score ${result.score})</strong>` +
+          (result.reasons.length ? '<br>' + result.reasons.join(' · ') : '');
+      }
+    } catch (e) {
+      alert('Submit failed: ' + e.message);
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = 'Submit Reading';
+    }
+  });
+
+  // ── Fake Sick (test button) ───────────────────────────────────────────────
+  document.getElementById('fake-sick-btn').addEventListener('click', async () => {
+    if (!userLocation) {
+      return alert('Location permission is required. Allow location access and refresh the page.');
+    }
+
+    const btn = document.getElementById('fake-sick-btn');
+    btn.disabled    = true;
+    btn.textContent = 'Submitting…';
+
+    const resultEl = document.getElementById('result-section');
+    resultEl.style.display = 'none';
+
+    try {
+      // Values guaranteed to score 6: pulse >100 (+2), breathing >24 (+2), symptoms (+2)
+      const body = {
+        userId,
+        lat:               userLocation.lat,
+        lng:               userLocation.lng,
+        pulseRate:         110,
+        breathingRate:     26,
+        hrvMs:             15,
+        confidence:        0.95,
+        durationSec:       45,
+        exercisedRecently: false,
+        symptoms:          true,
+      };
+
+      const res    = await fetch('/readings', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      const result = await res.json();
+
+      resultEl.style.display = 'block';
+      if (result.error) {
+        resultEl.className   = 'result-high';
+        resultEl.textContent = 'Error: ' + result.error;
+      } else if (result.highRisk) {
+        resultEl.className = 'result-high';
+        resultEl.innerHTML =
+          `<strong>Fake sick submitted (score ${result.score})</strong><br>` +
+          result.reasons.join(' · ');
+        loadRiskAreas();
+      } else {
+        resultEl.className   = 'result-low';
+        resultEl.textContent = `Not flagged (score ${result.score}) — need ≥3 distinct users on the map.`;
+      }
+    } catch (e) {
+      alert('Submit failed: ' + e.message);
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = '🧪 Fake Sick (test)';
+    }
+  });
+</script>
+</body>
+</html>
